@@ -23,6 +23,8 @@ public class NetworkClient : MonoBehaviour, INetEventListener
 
     public UnityEvent GameStartEvent;
 
+    public WarningPanel warningPanel;
+
     // * player isimleri
     public List<string> player_list = new List<string>();
 
@@ -57,7 +59,8 @@ public class NetworkClient : MonoBehaviour, INetEventListener
 
         if (localHost)
         {
-            _netClient.Connect("localhost", 5000, "sample_app");
+            _netClient.Connect(PlayerData.singleton.hostip, PlayerData.singleton.hostport, "sample_app");
+            //_netClient.Connect("localhost", 5000, "sample_app");
             return;
         }
 
@@ -70,7 +73,7 @@ public class NetworkClient : MonoBehaviour, INetEventListener
     {
         if (p.playerCount >= 4)
         {
-            print("oda dolu");
+            warningPanel.GeneralError("Girmeye çalıştığın oda dolu");
             return;
         }
         _netClient.Connect(p.ip, "sample_app");

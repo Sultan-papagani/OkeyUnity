@@ -15,6 +15,8 @@ public class GameWaitPanel : MonoBehaviour
     //public List<TextMeshProUGUI> player_ui_tabla = new List<TextMeshProUGUI>();
     public List<PlayerWaitSlot> player_ui_tabla = new List<PlayerWaitSlot>();
 
+    public WarningPanel warningPanel;
+
     void Start() 
     {
         updateUI();
@@ -52,11 +54,15 @@ public class GameWaitPanel : MonoBehaviour
         if (PlayerData.singleton.isHost)
         {
             // kontrolü burda yazıyoz ki hata ekranının her yere referansını vermeyelim
-            if (server.peer_list.Count >= 0)
+            if (server.peer_list.Count == 4)
             {
                 // masayı aç.
                 // buranın client olmasına gerek yok ZATEN her şekilde sunucu bilgisayarındayız
                 server.StartGameFromWaitLobby();
+            }
+            else
+            {
+                warningPanel.GeneralError("Oyuna başlamak için 4 kişi olmalı");
             }
         }
     }

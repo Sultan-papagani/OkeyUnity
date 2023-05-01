@@ -26,11 +26,13 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
         _dataWriter = new NetDataWriter();
         _netServer = new NetManager(this);
         NetDebug.Logger = this;
-        _netServer.Start(5000);
+        _netServer.IPv6Mode = IPv6Mode.Disabled;
+        _netServer.Start(PlayerData.singleton.hostip, PlayerData.singleton.hostip, PlayerData.singleton.hostport);
+        //_netServer.Start(5000);
+        //_netServer.Start("localhost", "localhost", 5000);
         _netServer.BroadcastReceiveEnabled = true;
         _netServer.UpdateTime = 15;
         _packetProcessor = new NetPacketProcessor();
-
         //_packetProcessor.SubscribeReusable<PlayerLoginPacket>(PlayerLoginPacketRecived);
     }
 
