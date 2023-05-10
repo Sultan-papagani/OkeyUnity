@@ -54,7 +54,7 @@ public class GameWaitPanel : MonoBehaviour
         if (PlayerData.singleton.isHost)
         {
             // kontrolü burda yazıyoz ki hata ekranının her yere referansını vermeyelim
-            if (server.peer_list.Count == 4)
+            if (server.peer_list.Count > 0) // BUNU DÜZEELT
             {
                 // masayı aç.
                 // buranın client olmasına gerek yok ZATEN her şekilde sunucu bilgisayarındayız

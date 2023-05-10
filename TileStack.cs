@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Security.Cryptography;
 
 /*
     ! Oyundaki Tüm Taşların Listesi
@@ -14,8 +15,13 @@ public class TileStack : MonoBehaviour
     /// <summary>
     /// Oyundaki Tüm taşların listesi.
     /// </summary>
-    [HideInInspector]
+
     public List<Tile> tile_stack_middle = new List<Tile>();
+
+    public int getTileStackCount()
+    {
+        return tile_stack_middle.Count;
+    }
 
     /// <summary>
     /// Oyundaki tüm taşları oluştur
@@ -26,11 +32,12 @@ public class TileStack : MonoBehaviour
         for (int i = 0; i < 4; i++)
         {
             // tüm sayılardan iki tane
-            for (int s = 1; s < 13; s++)
+            for (int s = 1; s < 14; s++)
             {
                 Tile tile = new Tile();
                 tile.color = (TileColor)i;
                 tile.number = s;
+                tile_stack_middle.Add(tile);
                 tile_stack_middle.Add(tile);
             }
         }
@@ -41,6 +48,8 @@ public class TileStack : MonoBehaviour
         joker_tile.number = 0;
         tile_stack_middle.Add(joker_tile);
         tile_stack_middle.Add(joker_tile);
+
+        Debug.Log($"dolduruldu: {tile_stack_middle.Count}");
     }
 
     /// <summary>
@@ -51,17 +60,37 @@ public class TileStack : MonoBehaviour
     {
         if (tile_stack_middle.Count == 0)
         {
-            // 0 "siyah" dönen boş oluyor
+   
             Tile tile_empty = new Tile();
             return tile_empty;
+        }
+
+        int index = RandomNumberGenerator.GetInt32(0, tile_stack_middle.Count - 1);
+        Tile card = tile_stack_middle[index];
+        tile_stack_middle.RemoveAt(index);
+
+        return card;
+    }
+
+
+
+    /// <summary>
+    /// Tüm taşların listesinden taş çek.
+    /// "" geliyorsa boş demektir
+    /// </summary>
+    public string PullTileFromStackString()
+    {
+
+        if (tile_stack_middle.Count == 0)
+        {
+            // boş dönen boş
+            return "";
         }
 
         int index = Random.Range(0, tile_stack_middle.Count - 1);
         Tile card = tile_stack_middle[index];
         tile_stack_middle.RemoveAt(index);
 
-        Debug.Log($"num:{card.number} color:{card.color} kart ortadan çekildi, kalan taş: {tile_stack_middle.Count}");
-
-        return card;
+        return card.getasstring();
     }
 }

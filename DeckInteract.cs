@@ -9,27 +9,49 @@ using UnityEngine;
 
 public class DeckInteract : MonoBehaviour
 {
-    public static DeckInteract singleton;
+   // public static DeckInteract singleton;
     public GameObject TilePrefab;
     public List<TileSlot> tile_slot_list = new List<TileSlot>();
 
     void Start()
     {
-        singleton = this;
+        //singleton = this;
     }
 
-    private void Update() {
-        if (Input.GetKeyDown(KeyCode.Q))
+    public int GetTileCount()
+    {
+        int i=0;
+        foreach (TileSlot s in tile_slot_list)
         {
-            // spawn test tile
-            if (SpawnTileWithCheck(10, TileColor.yellow, 14))
-            {
-                Debug.Log("başarili");
-            }
-            else
-            {
-                Debug.Log("yer yok");
-            }
+            if (s.transform.childCount > 0){i++;}
+        }
+        return i;
+    }
+
+    public void SpawnFromStarterTiles(PlayerStarterTiles newtiles)
+    {
+        int real_index = 0;
+        foreach (string tile in newtiles.tiles)
+        {
+            
+            TileColor tilecolor = TileColor.black;
+
+            int number = 0;
+            char color = tile[0];
+
+            if (color == 'J'){tilecolor = TileColor.fake_okey;} // joker
+            if (color == 'B'){tilecolor = TileColor.black;} // black
+            if (color == 'M'){tilecolor = TileColor.blue;} // mavi blue
+            if (color == 'Y'){tilecolor = TileColor.yellow;} // yellow
+            if (color == 'R'){tilecolor = TileColor.red;} // red
+
+            number = int.Parse(tile.Substring(1));
+            
+
+            SpawnTileWithCheck(number, tilecolor, real_index);
+            real_index++;
+
+            
         }
     }
 
@@ -58,18 +80,6 @@ public class DeckInteract : MonoBehaviour
         spawnedActor.tileData.number = number;
         spawnedActor.tileData.color = color;
 
-        /*
-        string cardColor = TileColor.GetName(typeof(TileColor), color);
-        Sprite resource_sprite;
-        if (number != 0)
-        {
-            resource_sprite = Resources.Load<Sprite>($"Textures/{cardColor+"_textures"}/{cardColor}_{number}");
-        }
-        else
-        {   
-            resource_sprite = Resources.Load<Sprite>("Textures/fake_joker");
-        }
-        */
 
         spawnedActor.TileSprite.sprite = StaticHelper.GetSpriteFromData(number, color);
     }

@@ -18,22 +18,25 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
     private NetDataWriter _dataWriter;
     private readonly NetDataWriter _cachedWriter = new NetDataWriter();
 
+    public OkeyGameManager okeyGameManager;
+
     public bool GameRunning;
+    public int PlayersTurnIndex = 0; // sırası olan kişinin indexi.
 
     // * sunucuyu başlatır
     public void StartServer()
     {
         _dataWriter = new NetDataWriter();
         _netServer = new NetManager(this);
+
         NetDebug.Logger = this;
+
         _netServer.IPv6Mode = IPv6Mode.Disabled;
         _netServer.Start(PlayerData.singleton.hostip, PlayerData.singleton.hostip, PlayerData.singleton.hostport);
-        //_netServer.Start(5000);
-        //_netServer.Start("localhost", "localhost", 5000);
+
         _netServer.BroadcastReceiveEnabled = true;
         _netServer.UpdateTime = 15;
         _packetProcessor = new NetPacketProcessor();
-        //_packetProcessor.SubscribeReusable<PlayerLoginPacket>(PlayerLoginPacketRecived);
     }
 
 
@@ -60,6 +63,7 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
 
 
 
+
     // * Bir peer sunucuya bağlandı
     public void OnPeerConnected(NetPeer peer)
     {
@@ -68,6 +72,7 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
         new_player.peer = peer;
         peer_list.Add(new_player);
     }
+
 
 
 
@@ -96,6 +101,7 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
 
 
 
+
     // * peer bağlantı isteği
     public void OnConnectionRequest(ConnectionRequest request)
     {
@@ -110,6 +116,7 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
 
 
 
+
     // * peer sunucudan ayrıldı
     public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
     {
@@ -118,6 +125,9 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
         RemovePlayer(peer);
         UpdateClientsPlayerList();
     }
+
+
+
 
     // * oyuncuyu listeden kaldır
     public void RemovePlayer(NetPeer peer)
@@ -133,6 +143,8 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
     }
 
 
+
+
     // * peer'den Paket aldık
     public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
     {
@@ -141,20 +153,58 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
         switch (pt)
         {
             case PacketType.ts_PlayerLoginPacket:
-                PlayerLoginPacket p = new PlayerLoginPacket();
-                p.Deserialize(reader);
-                PlayerLoginPacketRecived(p, peer);
+                PlayerLoginPacketRecived(reader, peer);
                 break;
+
+            case PacketType.ts_ClientTasAtti:
+                OnClientTasAtti(reader);
+                break;
+
+            case PacketType.ts_ClientTasCekti:
+                OnClientKenardanTasCekti(reader);
+                break;
+
         }
+    }
+
+    // * çekilen taşı göster
+    public void OnClientKenardanTasCekti(NetPacketReader reader)
+    {
+        TasPacket tas = new TasPacket();
+        tas.Deserialize(reader);
+
+        foreach(Player player in peer_list)
+        {
+            player.peer.Send(WriteSerializable(PacketType.tc_CekilenTasiGoster, tas), DeliveryMethod.ReliableOrdered);
+        }
+    }
+
+
+
+    // * client taş attı. diğer clientlerde göster ve ilerlet
+    public void OnClientTasAtti(NetPacketReader reader)
+    {
+        TasPacket tas = new TasPacket();
+        tas.Deserialize(reader);
+
+        foreach(Player player in peer_list)
+        {
+            player.peer.Send(WriteSerializable(PacketType.tc_AtilanTasiGoster, tas), DeliveryMethod.ReliableOrdered);
+        }
+
+        // belli bir süre sonra bir sonraki kişiye sırayı ver.
+        Invoke(nameof(GivePlayerTurn), 1f);
     }
 
 
 
 
     // * peer kullanıcı bilgisini yolladı.
-    //public void PlayerLoginPacketRecived(PlayerLoginPacket p)
-    public void PlayerLoginPacketRecived(PlayerLoginPacket p, NetPeer peer)
+    public void PlayerLoginPacketRecived(NetDataReader reader, NetPeer peer)
     {
+        PlayerLoginPacket p = new PlayerLoginPacket();
+        p.Deserialize(reader);
+
         for (int i=0; i<peer_list.Count; i++)
         {
             if (peer_list[i].peer.Equals(peer))
@@ -168,10 +218,9 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
 
 
 
+    // * Wait Panelden oyunu başlatıyoruz. herkesi oyun paneline geçir ve süre sonra taşları dağıt
     public void StartGameFromWaitLobby()
     {
-        GameRunning = true;
-
         StartGamePacket packet = new StartGamePacket();
         packet.test = true;
 
@@ -179,7 +228,55 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
         {
             player.peer.Send(WriteSerializable(PacketType.tc_StartGamePacket, packet), DeliveryMethod.ReliableOrdered);
         }
+
+        okeyGameManager.StartGameEvent();
+
+        Invoke(nameof(HerkesinTaslariVer), 6f);
     }
+
+
+
+
+    // * oyunculara başlangıç taşlarını ver 14-15 olan
+    public void HerkesinTaslariVer()
+    {
+        bool firstStart = true;
+
+        foreach (Player player in peer_list)
+        {
+            string[] arr = okeyGameManager.RequestStartTilePayloadForOnePlayer(firstStart).ToArray();
+            PlayerStarterTiles newtiles = new PlayerStarterTiles();
+            newtiles.tiles = arr;
+
+            player.peer.Send(WriteSerializable(PacketType.tc_PlayerStarterTiles, newtiles), DeliveryMethod.ReliableOrdered);
+
+            firstStart = false;
+        }
+
+        //Invoke(nameof(GivePlayerTurn), 19f);
+        GivePlayerTurn(); // şimdilik direk başlat
+    }
+
+
+
+
+
+    // * oyunu ilerlet, bir sonrakine sıra ver.
+    public void GivePlayerTurn()
+    {
+        PlayerOynamaSirasi sira = new PlayerOynamaSirasi();
+        sira.playername = peer_list[PlayersTurnIndex].PlayerName;
+
+        peer_list[PlayersTurnIndex].peer.Send(WriteSerializable(PacketType.tc_PlayerOynamaSirasi, sira), DeliveryMethod.ReliableOrdered);
+
+        PlayersTurnIndex++;
+
+        if (PlayersTurnIndex > 3)
+        {
+            PlayersTurnIndex = 0;
+        }
+    }
+
 
 
 
@@ -255,6 +352,58 @@ public class NetworkServer : MonoBehaviour, INetEventListener, INetLogger
 }
 
 
+// TasPaketi
+public struct TasPacket : INetSerializable
+{
+    public string atilan_tas{get; set;}
+    public int atma_yer_id{get; set;}
+
+    public void Deserialize(NetDataReader reader)
+    {
+        atilan_tas = reader.GetString();
+        atma_yer_id = reader.GetInt();
+    }
+
+    public void Serialize(NetDataWriter writer)
+    {
+        writer.Put(atilan_tas);
+        writer.Put(atma_yer_id);
+    }
+}
+
+
+
+public struct PlayerOynamaSirasi : INetSerializable
+{
+    public string playername {get; set;}
+
+    public void Deserialize(NetDataReader reader)
+    {
+        playername = reader.GetString();
+    }
+
+    public void Serialize(NetDataWriter writer)
+    {
+        
+        writer.Put(playername);
+    }
+}
+
+
+public struct PlayerStarterTiles : INetSerializable
+{
+    public string[] tiles {get; set;}
+
+    public void Deserialize(NetDataReader reader)
+    {
+        tiles = reader.GetStringArray();
+    }
+
+    public void Serialize(NetDataWriter writer)
+    {
+        writer.PutArray(tiles);
+    }
+}
 
 
 // * peer oyuna katıldığında bilgisini sunucuya yollaması için
@@ -344,7 +493,13 @@ public enum PacketType : byte
     ts_PlayerLoginPacket,
     tc_DiscoveryResponse,
     tc_UpdatePlayerList,
-    tc_StartGamePacket
+    tc_StartGamePacket,
+    tc_PlayerStarterTiles,
+    tc_PlayerOynamaSirasi,
+    ts_ClientTasAtti,
+    tc_AtilanTasiGoster,
+    ts_ClientTasCekti,
+    tc_CekilenTasiGoster
 }
 
 

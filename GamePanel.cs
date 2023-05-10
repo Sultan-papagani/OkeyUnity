@@ -10,66 +10,185 @@ using TMPro;
 public class GamePanel : MonoBehaviour
 {
     public NetworkClient client;
-
+    public TimerUI startCountDown;
     public List<TextMeshProUGUI> oyuncu_textleri = new List<TextMeshProUGUI>();
+
+    public DeckInteract deckInteract;
+
+    public List<TileSlotKenar> atma_yerleri = new List<TileSlotKenar>();
+    public TileSlotKenar atma_yeri;
+    public TileSlotKenar alma_yeri;
+
+    public GameObject bizimSiraIndicator;
     
-    // * start yerine, oyun başlama eventi Client dan gelsin.
-    // beynimin bütün hücreleri yok oldu
+    // * WaitPanelden, oyun paneline geçiş yaptık.
     public void GameStartEvent()
     {
-        // bizim ismin indexi
+        atma_yeri.OnTileDropped.AddListener(TasAtmaYerineTasAttik);
+
+        // isimleri diz
         int our_index = 0;
-
-        List<string> playerisimleri = new List<string>();
-        playerisimleri = client.player_list;
-
-        foreach(string player in playerisimleri)
+        foreach(string player in client.player_list)
         {
             if (player == PlayerData.singleton.player_name)
             {
-                playerisimleri.Remove(player);
                 break;
             }
             our_index++;
         }
+          
 
-        int textselector = 0;
-        for (int i =0; i<playerisimleri.Count; i++)
+        int[] index_list = PlayerYerlesmeSirasi.getSeqfromIndex(our_index);
+
+        for(int i=0; i<3; i++)
         {
-            if (our_index > playerisimleri.Count - 1){our_index = 0;}
+            // oyunda daha az insan oluyor test ederken...
+            try
+            {
+                oyuncu_textleri[i].text = client.player_list[index_list[i]];
+            }
+            catch
+            {
 
-            oyuncu_textleri[textselector].text = playerisimleri[our_index];
-
-            our_index++;
-            textselector++;
+            }
         }
 
-        
-        /*foreach(TextMeshProUGUI pt in oyuncu_textleri)
-        {
-            if (counter > client.player_list.Count - 1) {counter = 0;}
-            if (counter == our_index) {break;}
-            pt.text = client.player_list[counter];
-        }*/
+        // atma yerleri indexleri diz
 
-        /*
-        // listede ismimizin yerini bul
-        int our_index = 0;
-        for (int i=0; i<4; i++){if (player_isimleri[i] == PlayerData.singleton.player_name){our_index = i; break;}}
-
-        // ismimizden başlayarak listede ilerle
-        // sona gelirsek başa sar.
-        int track_head = our_index + 1;
-        foreach(TextMeshProUGUI pt in oyuncu_textleri)
+        int[] index_idlist = PlayerYerlesmeSirasi.getSeqfromIndexID(our_index);
+        for (int s=0; s<4; s++)
         {
-            //if (track_head > 4){track_head = 0;}
-            if (track_head > player_isimleri.Count-1){track_head = 0;}
-            pt.text = player_isimleri[track_head];
-            track_head++;
+            atma_yerleri[s].id = index_idlist[s];
         }
-        */
+
+        startCountDown.SetTimer(5);
+    }
+
+
+
+
+    // * başlangıç taşları geldi. hepsini diz
+    public void OnStarterTilesRecived(PlayerStarterTiles newtiles)
+    {
+        startCountDown.SetTimer(5); // bu sunucuda da beklenmeli.
+        deckInteract.SpawnFromStarterTiles(newtiles);
+    } 
+
+
+
+
+
+    // * oyunda bizim sıramız, ne yapacağımıza karar ver.
+    public void OnOurTurn()
+    {
+        bizimSiraIndicator.SetActive(true);
+        // oyuna ilk biz başlamışız.. fazlayı at.
+        if(deckInteract.GetTileCount() == 15)
+        {
+            PlayerData.singleton.playState = PlayState.TasAtmali;
+            atma_yeri.SetArrowGraphic(true);
+        }
+        else
+        {
+            // o zaman önce çeker, sonra atarız
+            PlayerData.singleton.playState = PlayState.TasCekmeli;
+            alma_yeri.SetArrowGraphic(false);
+        }
 
     }
 
-    
+
+    public void KenardanTasiCektikEvent(Tile tile)
+    {
+        client.KenardanTasCektik(alma_yeri.GetTopTileAsStr(), alma_yeri.id);
+    }
+
+
+
+    // * tas attığımızı bildiriyoruz
+    public void TasAtmaYerineTasAttik(Tile tile)
+    {
+        client.KenaraTasAttik(tile.getasstring(), atma_yeri.id);
+        bizimSiraIndicator.SetActive(false);
+        PlayerData.singleton.playState = PlayState.Bos; // artık taşı attık sıramız bitti
+
+        alma_yeri.ResetArrow();
+        atma_yeri.ResetArrow();
+    }
+
+
+    public void CekilenTasiGoster(TasPacket tas)
+    {
+        if (tas.atma_yer_id == alma_yeri.id){return;} // bizim şimdi çektiğimiz taş...
+
+        foreach(TileSlotKenar atma in atma_yerleri)
+        {
+            if (atma.id == tas.atma_yer_id)
+            {
+                atma.EnUsttekiTileyiCek();
+                return;
+            }
+        }
+    }
+
+
+
+    // * sunucu atılan taşları bize gönderiyo
+    public void AtilanTasiGoster(TasPacket tas)
+    {
+        if (tas.atma_yer_id == atma_yeri.id){return;} // bizim şimdi attığımız taş...
+
+        foreach(TileSlotKenar atma in atma_yerleri)
+        {
+            if (atma.id == tas.atma_yer_id)
+            {
+                atma.TasEkle(tas.atilan_tas);
+                return;
+            }
+        }
+    }
+}
+
+
+
+
+public static class PlayerYerlesmeSirasi
+{
+    public static int[] getSeqfromIndex(int index)
+    {
+        int[] index_array = new int[3] {1,2,3};
+        switch (index)
+        {
+            case 1:
+                index_array = new int[] {2,3,0};
+                break;
+            case 2:
+                index_array = new int[] {3,0,1};
+                break;
+            case 3:
+                index_array = new int[] {0,1,2};
+                break;
+        }
+
+        return index_array;
+    }
+
+    public static int[] getSeqfromIndexID(int index)
+    {
+        int[] index_array = new int[4] {0,1,2,3};
+        switch (index)
+        {
+            case 1:
+                index_array = new int[] {1,2,3,0};
+                break;
+            case 2:
+                index_array = new int[] {2,3,0,1};
+                break;
+            case 3:
+                index_array = new int[] {3,0,1,2};
+                break;
+        }
+
+        return index_array;
+    }
 }

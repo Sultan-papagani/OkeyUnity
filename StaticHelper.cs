@@ -23,4 +23,21 @@ public static class StaticHelper
         }
         return resource_sprite;
     }
+
+
+    public static Sprite GetSpriteFromData(Tile tile)
+    {
+        string cardColor = TileColor.GetName(typeof(TileColor), tile.color);
+        Sprite resource_sprite;
+        if (tile.number != 0)
+        {
+            resource_sprite = Resources.Load<Sprite>($"Textures/{cardColor+"_textures"}/{cardColor}_{tile.number}");
+        }
+        else
+        {   
+            resource_sprite = Resources.Load<Sprite>("Textures/fake_joker");
+        }
+        return resource_sprite;
+    }
+
 }

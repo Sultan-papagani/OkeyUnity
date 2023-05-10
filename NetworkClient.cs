@@ -22,8 +22,14 @@ public class NetworkClient : MonoBehaviour, INetEventListener
     public UnityEvent OnPlayerListUpdated;
 
     public UnityEvent GameStartEvent;
+    public UnityEvent<PlayerStarterTiles> GameStarterTilesGiven;
+    public UnityEvent PlayerTurnEvent;
+    public UnityEvent<TasPacket> AtilanTasiGosterEvent;
+    public UnityEvent<TasPacket> KenardanCekilenTasiGoster;
 
     public WarningPanel warningPanel;
+
+    public NetPeer sunucuPeer;
 
     // * player isimleri
     public List<string> player_list = new List<string>();
@@ -69,6 +75,8 @@ public class NetworkClient : MonoBehaviour, INetEventListener
     }
 
 
+
+    // * hosta bağlan
     public void ConnectToHost(DiscoveryResultObject p)
     {
         if (p.playerCount >= 4)
@@ -82,12 +90,13 @@ public class NetworkClient : MonoBehaviour, INetEventListener
     }
 
 
+
     // * Discovery paketi yolla.
     public void FindServerRepeating()
 
     {
         var peer = _netClient.FirstPeer;
-        _netClient.SendBroadcast(new byte[] {1}, 5000);
+        _netClient.SendBroadcast(new byte[] {1}, PlayerData.singleton.hostport);
 
         if (peer != null && peer.ConnectionState == ConnectionState.Connected)
         {
@@ -97,15 +106,14 @@ public class NetworkClient : MonoBehaviour, INetEventListener
     }
 
 
-    // HOCAM MERHABAAAAAAA bunu okulda size göstereceğimi bildiğim için yazıyorum
-    // tarih 30.04.2023 saat 03:44 
-    // daha yapılacak çoooooook iş var.
-    // umarım oyun çalışır
+
     
 
     // * sunucuya bağlandık (sunucuya LoginPacket yolluyoruz)
     public void OnPeerConnected(NetPeer peer)
     {
+        sunucuPeer = peer;
+
         Debug.Log("[CLIENT] sunucuya bağlandik: " + peer.EndPoint);
         PlayerLoginPacket login_info = new PlayerLoginPacket();
 
@@ -159,6 +167,8 @@ public class NetworkClient : MonoBehaviour, INetEventListener
     // * bağlantı koptu
     public void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
     {
+        sunucuPeer = null;
+
         Debug.Log("[CLIENT] Bağlanti koptu: " + disconnectInfo.Reason);
         ServerConnectionLost?.Invoke();
         player_list.Clear();
@@ -170,13 +180,11 @@ public class NetworkClient : MonoBehaviour, INetEventListener
 
 
 
+
     // * sunucudan paket aldık
     public void OnNetworkReceive(NetPeer peer, NetPacketReader reader, byte channelNumber, DeliveryMethod deliveryMethod)
     {
         byte packetType = reader.GetByte();
-
-        /*if (packetType >= 2)
-            return;*/
 
         PacketType pt = (PacketType) packetType;
 
@@ -187,14 +195,104 @@ public class NetworkClient : MonoBehaviour, INetEventListener
                 break;
 
             case PacketType.tc_StartGamePacket:
-            OnGameStartPacket(reader);
+                OnGameStartPacket(reader);
                 break;
+
+            case PacketType.tc_PlayerStarterTiles:
+                OnStarterTiles(reader);
+                break;
+
+            case PacketType.tc_PlayerOynamaSirasi:
+                OnPlayerOynamaSirasi(reader);
+                break;
+
+            case PacketType.tc_AtilanTasiGoster:
+                AtilanTasiGosterPacket(reader);
+                break;
+
+            case PacketType.tc_CekilenTasiGoster:
+                KenarCekilenTasiGoster(reader);
+                break;
+
+
         }
 
-        print(pt);
     }
 
+
+    public void KenarCekilenTasiGoster(NetPacketReader reader)
+    {
+        TasPacket tas = new TasPacket();
+        tas.Deserialize(reader);
+
+        KenardanCekilenTasiGoster?.Invoke(tas);
+    }
+
+
+
+    // * başka kişilerin attığı taşları kenarlarda göstermek için.
+    public void AtilanTasiGosterPacket(NetPacketReader reader)
+    {
+        TasPacket tas = new TasPacket();
+        tas.Deserialize(reader);
+
+        AtilanTasiGosterEvent?.Invoke(tas);
+    }
+
+
+
+
+    // * biz taş atıyoruz, sunucuya yollanıyor
+    public void KenaraTasAttik(string tile, int atilan_kose_id)
+    {
+        TasPacket tas = new TasPacket();
+
+        tas.atilan_tas = tile;
+        tas.atma_yer_id = atilan_kose_id;
+
+        sunucuPeer.Send(WriteSerializable(PacketType.ts_ClientTasAtti, tas), DeliveryMethod.ReliableOrdered);
+    }
+
+
+    // * biz taş atıyoruz, sunucuya yollanıyor
+    public void KenardanTasCektik(string tile, int cekilen_kose_id)
+    {
+        TasPacket tas = new TasPacket();
+
+        tas.atilan_tas = tile;
+        tas.atma_yer_id = cekilen_kose_id;
+
+        sunucuPeer.Send(WriteSerializable(PacketType.ts_ClientTasCekti, tas), DeliveryMethod.ReliableOrdered);
+    }
+
+
+    // * sunucu oynama sırası veriyor.
+    public void OnPlayerOynamaSirasi(NetPacketReader reader)
+    {
+        PlayerOynamaSirasi sira = new PlayerOynamaSirasi();
+        sira.Deserialize(reader);
+
+        // sıra bizimse eventi uyandır
+        if (sira.playername == PlayerData.singleton.player_name)
+        {
+            PlayerTurnEvent?.Invoke();
+        }
+
+    }
+
+
+
+    // * sunucu başlangıç taşlarını verdi 14-15 tane
+    public void OnStarterTiles(NetPacketReader reader)
+    {
+        PlayerStarterTiles tiles = new PlayerStarterTiles();
+        tiles.Deserialize(reader);
+        GameStarterTilesGiven?.Invoke(tiles);
+    }
+
+
     
+    // * WaitPanelden, oyun paneline geçiyoruz
     public void OnGameStartPacket(NetPacketReader reader)
     {
         StartGamePacket pckt = new StartGamePacket();
@@ -204,8 +302,9 @@ public class NetworkClient : MonoBehaviour, INetEventListener
         // ordan doğru GamePanel çağrılıyor..
         GameStartEvent?.Invoke();
 
-        Debug.Log("oyuna başlıyoruz...");
     }
+
+
 
 
     // * oyuncu listesi değişti.

@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Sockets;
 using System;
 using System.Net.NetworkInformation;
+using UnityEngine.Events;
 
 public class PlayerData : MonoBehaviour
 {
@@ -14,12 +15,19 @@ public class PlayerData : MonoBehaviour
     public string hostip = "localhost";
     public int hostport = 5000;
 
+    public PlayState playState = PlayState.Bos;
+
+    public UnityEvent<Tile> KenardanCekilenTasEvent;
+
     public static PlayerData singleton;
 
     private void Start() 
     {
         DontDestroyOnLoad(gameObject);
         singleton = this;
+
+        // yani denemek lazım.
+        hostip = GetIP();
     }
 
     public string GetIP()
@@ -89,4 +97,11 @@ public class PlayerData : MonoBehaviour
         }
         return false;
     }
+}
+
+public enum PlayState
+{
+    TasCekmeli,
+    TasAtmali,
+    Bos
 }

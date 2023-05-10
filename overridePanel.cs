@@ -11,6 +11,12 @@ public class overridePanel : MonoBehaviour
 
     public GameObject panel;
 
+    private void Start() 
+    {
+        textipadress.text = PlayerData.singleton.hostip;
+        textport.text = PlayerData.singleton.hostport.ToString();
+    }
+
     public void SetVaulesUI()
     {
         string ipadress = "localhost";
